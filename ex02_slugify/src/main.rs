@@ -21,8 +21,8 @@ fn get_transform_fn(operation: String) -> fn(String) -> String {
         "uppercase" => |s| { s.to_uppercase() },
         "no-spaces" => |s| { s.replace(" ", "") },
         "slugify" => |s| { slugify(s) },
-        "length" => |s| { s.chars().count().to_string() },
-        "reverse" => |s| { s.chars().rev().collect() },
+        "length" => |s| { s.trim().chars().count().to_string() },
+        "reverse" => |s| { s.trim().chars().rev().collect() },
         _ => {
             println!("Command line argument must be one of: lowercase,uppercase,no-spaces,slugify,length,reverse");
             exit(1);
