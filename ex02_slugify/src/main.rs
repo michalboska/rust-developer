@@ -9,13 +9,13 @@ fn main() {
         println!("Missing command line argument!");
         exit(1);
     }
-    let transform_fn = get_transform_fn(String::from(&args[1]));
+    let transform_fn = get_transform_fn(&args[1]);
     let mut buffer: String = String::from("");
     let _ = io::stdin().read_line(&mut buffer);
-    println!("Result: {}", transform_fn(buffer));
+    println!("Result: {}", transform_fn(&buffer));
 }
 
-fn get_transform_fn(operation: String) -> fn(String) -> String {
+fn get_transform_fn(operation: &String) -> fn(&str) -> String {
     return match operation.as_str() {
         "lowercase" => |s| { s.to_lowercase() },
         "uppercase" => |s| { s.to_uppercase() },
