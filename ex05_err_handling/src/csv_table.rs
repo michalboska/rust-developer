@@ -7,6 +7,9 @@ use pad::{Alignment, PadStr};
 
 // could have probably used something like https://crates.io/crates/csv_to_table but it wouldn't be as challenging :)
 
+const COL_PADDING: usize = 2;
+const PRINT_ROW_SEPARATORS: bool = false;
+
 pub struct CsvTable {
     columns: Vec<CsvColumn>,
     rows: Vec<Vec<String>>,
@@ -20,8 +23,13 @@ impl Display for CsvTable {
         f.write_str(&spacing_row)?;
         for i in 0..self.rows.len() {
             f.write_str(&self.get_body_row(&self.rows[i]))?;
+            if PRINT_ROW_SEPARATORS {
+                f.write_str(&spacing_row)?;
+            }
         }
-        f.write_str(&spacing_row)?;
+        if !PRINT_ROW_SEPARATORS {
+            f.write_str(&spacing_row)?;
+        }
         return Ok(());
     }
 }
@@ -56,7 +64,7 @@ impl CsvTable {
     fn process_header_value(value: &str, csv_struct: &mut CsvTable) {
         csv_struct.columns.push(CsvColumn {
             title: value.to_string(),
-            max_length: value.len(),
+            max_length: value.len() + COL_PADDING,
         });
     }
 
@@ -64,10 +72,10 @@ impl CsvTable {
         let columns = &mut csv_struct.columns;
         if index < columns.len() {
             let column = &mut columns[index];
-            column.max_length = max(column.max_length, value.len());
+            column.max_length = max(column.max_length, value.len() + COL_PADDING);
         } else {
             let new_column = CsvColumn {
-                max_length: value.len(),
+                max_length: value.len() + COL_PADDING,
                 title: String::new(),
             };
             columns.push(new_column);
