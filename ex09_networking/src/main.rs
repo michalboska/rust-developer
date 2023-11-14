@@ -2,7 +2,6 @@ use fs::File;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Write};
-use std::mem::transmute;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::Path;
 use std::process::exit;
@@ -86,31 +85,30 @@ fn server_handle_client(
         };
 
         if let Some(message) = message_option {
-            let mut clients_to_remove = Vec::<&SocketAddr>::new();
-            {
-                let first_reborrow = &mut *clients;
-                first_reborrow
-                    .iter()
-                    .filter(|(&it_socket_addr, _)| it_socket_addr == *socket_addr)
-                    .for_each(|(sock_addr, rc)| {
-                        let result = rc.borrow_mut().send_message_to_server(&message);
-                        if let Err(_) = result {
-                            clients_to_remove.push(sock_addr);
-                        }
-                    });
-            }
-
-            {
-                let second_reborrow = &mut *clients;
-                for sock_addr in clients_to_remove {
-                    second_reborrow.remove(sock_addr);
-                }
-            }
-
-            // clients_to_remove.iter().for_each(|&it| {
-            //     clients.remove(it);
-            // });
+            server_process_client_message(clients, socket_addr, &message);
         }
+    }
+}
+
+fn server_process_client_message(
+    clients: &mut HashMap<SocketAddr, Rc<RefCell<MessageTcpStream<Message>>>>,
+    client_socket_addr: &SocketAddr,
+    message: &Message,
+) {
+    let mut clients_to_remove = Vec::<SocketAddr>::new();
+
+    clients
+        .iter()
+        .filter(|(&it_socket_addr, _)| it_socket_addr == *client_socket_addr)
+        .for_each(|(sock_addr, rc)| {
+            let result = rc.borrow_mut().send_message_to_server(message);
+            if let Err(_) = result {
+                clients_to_remove.push(sock_addr.clone());
+            }
+        });
+
+    for socket_addr in clients_to_remove {
+        clients.remove(&socket_addr);
     }
 }
 
