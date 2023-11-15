@@ -1,0 +1,11 @@
+[package]
+name = "ex11-shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = { workspace = true }
+serde = { workspace = true }
+serde_derive = { workspace = true }
+bincode = { workspace = true }
+regex = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name = "ex11-bin"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ex11-shared = { path = "../ex11-shared" }
+ex11-client = { path = "../ex11-client" }
+ex11-server = { path = "../ex11-server" }
+clap = { workspace = true }
+flume = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
