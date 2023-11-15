@@ -1,8 +1,6 @@
-use fmt::Display;
 use std::error::Error;
 use std::fmt;
-use std::fmt::Formatter;
-
+use std::fmt::{Display, Formatter};
 pub type BoxDynError = Box<dyn Error>;
 
 #[derive(Debug)]

@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::fmt::Display;
 use std::fs::File;
 use std::io::Read;
 
@@ -43,14 +42,3 @@ impl Message {
         Ok(buf)
     }
 }
-
-// impl Display for Message {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         return write!(
-//             f,
-//             "Message: {:?} body: [{} bytes]",
-//             self.message_type,
-//             self.binary_body.len()
-//         );
-//     }
-// }
