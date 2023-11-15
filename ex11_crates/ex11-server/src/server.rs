@@ -34,6 +34,7 @@ impl<T: Serialize + DeserializeOwned> Server<T> {
         for stream_result in self.listener.incoming() {
             let stream = stream_result?;
             let addr = stream.peer_addr()?;
+            info!("New client {} connected.", addr);
             let message_stream = MessageTcpStream::from_tcp_stream(stream, DEFAULT_TIMEOUT)?;
 
             let rc = Rc::new(RefCell::new(message_stream));
@@ -65,6 +66,7 @@ impl<T: Serialize + DeserializeOwned> Server<T> {
         client_socket_addr: &SocketAddr,
         message: &T,
     ) {
+        info!("Message from client {}", client_socket_addr);
         let mut clients_to_remove = Vec::<SocketAddr>::new();
         clients
             .iter_mut()
@@ -72,6 +74,7 @@ impl<T: Serialize + DeserializeOwned> Server<T> {
             .for_each(|(sock_addr, message_stream)| {
                 let result = message_stream.borrow_mut().send_message_to_server(message);
                 if let Err(_) = result {
+                    info!("Client {} dropped", sock_addr);
                     clients_to_remove.push(sock_addr.clone());
                 }
             });

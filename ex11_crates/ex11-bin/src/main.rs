@@ -78,11 +78,11 @@ fn client_stdin_reader(message_tx: Sender<Message>) {
                     }
                 }
                 Err(err) => {
-                    eprintln!("{}", err);
+                    error!("{}", err);
                 }
             },
             Err(err) => {
-                eprintln!("{}", err);
+                error!("{}", err);
                 break;
             }
         }
