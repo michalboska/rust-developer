@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::process::exit;
 use std::str::FromStr;
@@ -7,8 +7,8 @@ use std::{io, thread};
 
 use clap::Parser;
 use flume::Sender;
-use log::error;
-use log::LevelFilter::Info;
+use log::LevelFilter::Debug;
+use log::{debug, error};
 
 use ex11_client::client::Client;
 use ex11_server::server::Server;
@@ -23,7 +23,20 @@ const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 11111;
 
 fn main() {
-    env_logger::builder().filter_level(Info).init();
+    env_logger::builder()
+        .filter_level(Debug)
+        .format(|buf, record| {
+            buf.write_fmt(format_args!(
+                "{}:{} {} [{}] - {}\n",
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                chrono::Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                record.args()
+            ))?;
+            Ok(())
+        })
+        .init();
 
     let cli = Cli::parse();
     let address = cli.hostname.unwrap_or(DEFAULT_HOST.to_string());
@@ -65,12 +78,16 @@ fn client_stdin_reader(message_tx: Sender<Message>) {
     let mut buf = String::new();
     loop {
         buf.clear();
-        match stdin_lock.read_line(&mut buf) {
+        let read_result = stdin_lock.read_line(&mut buf);
+        let buf_trim = buf.trim();
+        match read_result {
             Ok(0) => {
-                break;
+                debug!("stdin is empty, exitting...");
+                exit(0);
             }
-            Ok(_) => match Message::from_str(&buf.trim()) {
+            Ok(_) => match Message::from_str(buf_trim) {
                 Ok(message) => {
+                    debug!("Read valid message: {}", buf_trim);
                     if matches!(message, Message::Quit) {
                         break;
                     } else {

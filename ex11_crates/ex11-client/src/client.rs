@@ -27,7 +27,7 @@ impl Client {
         Ok(Client {
             message_stream: MessageTcpStream::from_tcp_stream(
                 TcpStream::connect(socket_addr)?,
-                DEFAULT_TIMEOUT,
+                Some(DEFAULT_TIMEOUT),
             )?,
             stdin_input_rx,
         })
@@ -38,7 +38,7 @@ impl Client {
             // was there any input from stdin?
             let result = self.stdin_input_rx.recv_timeout(DEFAULT_TIMEOUT);
             if let Ok(message) = result {
-                self.message_stream.send_message_to_server(&message)?;
+                self.message_stream.send_message(&message)?;
                 if matches!(message, Message::Quit) {
                     return Ok(());
                 }

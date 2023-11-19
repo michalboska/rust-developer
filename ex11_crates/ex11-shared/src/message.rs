@@ -6,8 +6,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::message::Message::Image;
-
 lazy_static! {
     static ref REGEX: Regex = Regex::new("^\\.(\\S+) (\\S+)$").unwrap();
 }
@@ -26,7 +24,7 @@ impl Message {
             let arg = caps.get(2).unwrap().as_str();
             return match caps.get(1).unwrap().as_str() {
                 "file" => Ok(Message::File(arg.to_string(), Message::buf_from_file(arg)?)),
-                "image" => Ok(Image(Message::buf_from_file(arg)?)),
+                "image" => Ok(Message::Image(Message::buf_from_file(arg)?)),
                 "quit" => Ok(Message::Quit),
                 _ => Ok(Message::Text(arg.to_string())),
             };

@@ -9,3 +9,4 @@ serde = { workspace = true }
 serde_derive = { workspace = true }
 bincode = { workspace = true }
 regex = { workspace = true }
+log = { version = "0.4.20", features = [] }
