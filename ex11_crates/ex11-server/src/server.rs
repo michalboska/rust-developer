@@ -11,12 +11,17 @@ use ex11_shared::err::BoxDynError;
 use ex11_shared::message_tcp_stream::MessageTcpStream;
 
 type ClientType<T> = Arc<Mutex<MessageTcpStream<T>>>;
-type ClientsMap<T> = HashMap<SocketAddr, ClientType<T>>;
+type ClientsMap<T> = HashMap<SocketAddr, RwClient<T>>;
 type ClientsMapSync<T> = Arc<Mutex<ClientsMap<T>>>;
 
 pub struct Server<T: Serialize + DeserializeOwned + Send + 'static> {
     listener: TcpListener,
     clients: ClientsMapSync<T>,
+}
+
+struct RwClient<T: Send + 'static> {
+    reader: ClientType<T>,
+    writer: ClientType<T>,
 }
 
 impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
@@ -31,18 +36,31 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
     pub fn listen_blocking(&mut self) -> Result<(), BoxDynError> {
         let clients = Arc::clone(&self.clients);
         for stream_result in self.listener.incoming() {
-            let stream = stream_result?;
-            let addr = stream.peer_addr()?;
-            info!("New client {} connected.", addr);
-            let message_stream = MessageTcpStream::from_tcp_stream(stream, None)?;
-            let stream_arc = Arc::new(Mutex::new(message_stream));
+            let read_stream = stream_result?;
+            let write_stream = read_stream.try_clone()?;
+            let addr = read_stream.peer_addr()?;
+            let reader = Arc::new(Mutex::new(MessageTcpStream::from_tcp_stream(
+                read_stream,
+                None,
+            )?));
+            let writer = Arc::new(Mutex::new(MessageTcpStream::from_tcp_stream(
+                write_stream,
+                None,
+            )?));
+            {
+                let mut clients_guard = clients.lock().unwrap();
+                clients_guard.insert(
+                    addr,
+                    RwClient {
+                        reader: Arc::clone(&reader),
+                        writer: Arc::clone(&writer),
+                    },
+                );
+                info!("New client {} connected.", addr);
+            }
             let clients_send_arc = Arc::clone(&clients);
-            clients
-                .lock()
-                .unwrap()
-                .insert(addr, Arc::clone(&stream_arc));
             thread::spawn(move || {
-                Server::handle_client(clients_send_arc, stream_arc, addr.clone());
+                Server::handle_client(clients_send_arc, Arc::clone(&reader), addr.clone());
             });
         }
         Ok(())
@@ -50,7 +68,11 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
 
     fn handle_client(clients: ClientsMapSync<T>, stream: ClientType<T>, socket_addr: SocketAddr) {
         loop {
-            let message_option = match stream.lock().unwrap().read_next_message() {
+            let read_result = {
+                let mut stream_guard = stream.lock().unwrap();
+                stream_guard.read_next_message()
+            };
+            let message_option = match read_result {
                 Err(err) => {
                     debug!("Err from client {}: {}", &socket_addr, err);
                     Server::remove_dead_clients(&clients, &vec![socket_addr]);
@@ -73,11 +95,16 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
     ) {
         info!("Message from client {}", client_socket_addr);
         let mut clients_to_remove = Vec::<SocketAddr>::new();
-        clients
-            .lock()
-            .unwrap()
+        let mut other_clients_to_send_message = {
+            let mut clients_guard = clients.lock().unwrap();
+            clients_guard
+                .iter_mut()
+                .filter(|(&socket_addr, _)| socket_addr != *client_socket_addr)
+                .map(|(&socket_addr, client)| (socket_addr.clone(), Arc::clone(&client.writer)))
+                .collect::<Vec<(SocketAddr, ClientType<T>)>>()
+        };
+        other_clients_to_send_message
             .iter_mut()
-            .filter(|(&it_socket_addr, _)| it_socket_addr != *client_socket_addr)
             .for_each(|(sock_addr, message_stream)| {
                 let result = message_stream.lock().unwrap().send_message(message);
                 if let Err(_) = result {
