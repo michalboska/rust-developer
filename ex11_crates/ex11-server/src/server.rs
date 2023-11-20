@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use log::{debug, info};
 use serde::de::DeserializeOwned;
@@ -10,8 +9,6 @@ use serde::Serialize;
 
 use ex11_shared::err::BoxDynError;
 use ex11_shared::message_tcp_stream::MessageTcpStream;
-
-static DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
 
 type ClientType<T> = Arc<Mutex<MessageTcpStream<T>>>;
 type ClientsMap<T> = HashMap<SocketAddr, ClientType<T>>;
@@ -80,7 +77,7 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
             .lock()
             .unwrap()
             .iter_mut()
-            .filter(|(&it_socket_addr, _)| it_socket_addr == *client_socket_addr)
+            .filter(|(&it_socket_addr, _)| it_socket_addr != *client_socket_addr)
             .for_each(|(sock_addr, message_stream)| {
                 let result = message_stream.lock().unwrap().send_message(message);
                 if let Err(_) = result {

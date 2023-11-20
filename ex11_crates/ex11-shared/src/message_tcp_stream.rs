@@ -38,7 +38,7 @@ impl<T: Serialize + DeserializeOwned> MessageTcpStream<T> {
                 let message_bytes = self.read_next_n_bytes(message_size as usize)?;
                 debug!("Read binary message: {:?}", message_bytes);
                 let deserialized_message = deserialize(&message_bytes[..])?;
-                return Ok(deserialized_message);
+                return Ok(Some(deserialized_message));
             }
             Err(_) => Ok(None),
         }
