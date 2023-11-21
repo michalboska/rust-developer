@@ -1,3 +1,4 @@
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
@@ -23,6 +24,8 @@ impl Client {
         socket_addr: &SocketAddr,
         stdin_input_rx: Receiver<Message>,
     ) -> Result<Client, BoxDynError> {
+        fs::create_dir_all("files")?;
+        fs::create_dir_all("images")?;
         info!("Connecting to {}", socket_addr);
         Ok(Client {
             message_stream: MessageTcpStream::from_tcp_stream(
@@ -87,7 +90,11 @@ impl Client {
                 "Cannot save this message type as file",
             )),
         }?;
-        let mut file = File::options().write(true).truncate(true).open(path_str)?;
+        let mut file = File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(path_str)?;
         file.write(content)
             .and(Ok(()))
             .map_err(|err| RuntimeError::box_from_string(err.to_string()))

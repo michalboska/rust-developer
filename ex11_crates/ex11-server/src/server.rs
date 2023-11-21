@@ -11,17 +11,12 @@ use ex11_shared::err::BoxDynError;
 use ex11_shared::message_tcp_stream::MessageTcpStream;
 
 type ClientType<T> = Arc<Mutex<MessageTcpStream<T>>>;
-type ClientsMap<T> = HashMap<SocketAddr, RwClient<T>>;
+type ClientsMap<T> = HashMap<SocketAddr, ClientType<T>>;
 type ClientsMapSync<T> = Arc<Mutex<ClientsMap<T>>>;
 
 pub struct Server<T: Serialize + DeserializeOwned + Send + 'static> {
     listener: TcpListener,
     clients: ClientsMapSync<T>,
-}
-
-struct RwClient<T: Send + 'static> {
-    reader: ClientType<T>,
-    writer: ClientType<T>,
 }
 
 impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
@@ -49,13 +44,7 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
             )?));
             {
                 let mut clients_guard = clients.lock().unwrap();
-                clients_guard.insert(
-                    addr,
-                    RwClient {
-                        reader: Arc::clone(&reader),
-                        writer: Arc::clone(&writer),
-                    },
-                );
+                clients_guard.insert(addr, Arc::clone(&writer));
                 info!("New client {} connected.", addr);
             }
             let clients_send_arc = Arc::clone(&clients);
@@ -100,7 +89,7 @@ impl<T: Serialize + DeserializeOwned + Send + 'static> Server<T> {
             clients_guard
                 .iter_mut()
                 .filter(|(&socket_addr, _)| socket_addr != *client_socket_addr)
-                .map(|(&socket_addr, client)| (socket_addr.clone(), Arc::clone(&client.writer)))
+                .map(|(&socket_addr, client)| (socket_addr.clone(), Arc::clone(&client)))
                 .collect::<Vec<(SocketAddr, ClientType<T>)>>()
         };
         other_clients_to_send_message
