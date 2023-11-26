@@ -1,0 +1,17 @@
+[package]
+name = "ex13-bin"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ex13-shared = { path = "../ex13-shared" }
+ex13-client = { path = "../ex13-client" }
+ex13-server = { path = "../ex13-server" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+flume = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+chrono = { workspace = true }
