@@ -4,7 +4,7 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 use bincode::{deserialize, serialize};
-use log::debug;
+use log::{debug, error};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use thiserror::Error;
@@ -27,17 +27,27 @@ impl<T: Serialize + DeserializeOwned> MessageTcpStream<T> {
     }
 
     pub fn read_next_message(&mut self) -> Result<Option<T>, MessageTcpStreamError> {
-        let mut size_buf = [0u8; 4];
-        self.tcp_stream.read(&mut size_buf)?;
+        let mut read_fn = || {
+            let mut size_buf = [0u8; 4];
+            self.tcp_stream.read(&mut size_buf)?;
 
-        let message_size = u32::from_le_bytes(size_buf);
-        if message_size == 0 {
-            return Ok(None);
-        }
-        let message_bytes = self.read_next_n_bytes(message_size as usize)?;
-        debug!("Read binary message: {:?}", message_bytes);
-        let deserialized_message = deserialize(&message_bytes[..])?;
-        return Ok(Some(deserialized_message));
+            let message_size = u32::from_le_bytes(size_buf);
+            if message_size == 0 {
+                return Ok::<Option<Vec<u8>>, MessageTcpStreamError>(None);
+            }
+            Ok(Some(self.read_next_n_bytes(message_size as usize)?))
+        };
+        return match read_fn() {
+            Ok(Some(message_bytes)) => {
+                debug!("Read binary message: {:?}", message_bytes);
+                Ok(Some(deserialize(&message_bytes[..])?))
+            }
+            Err(MessageTcpStreamError::IOError(io_err)) if io_err.raw_os_error() == Some(35) => {
+                Ok(None)
+            }
+            Err(e) => Err(e),
+            Ok(None) => Ok(None),
+        };
     }
 
     pub fn send_message(&mut self, message: &T) -> Result<(), MessageTcpStreamError> {
