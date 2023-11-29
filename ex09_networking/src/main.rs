@@ -1,4 +1,5 @@
 use fs::File;
+use std::{fs, io, thread};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{BufRead, Read, Write};
@@ -9,7 +10,6 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::string::ToString;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{fs, io, thread};
 
 use clap::Parser;
 use flume::Sender;
@@ -49,7 +49,7 @@ fn main() {
 
 fn get_socket_addr(ip_addr_str: &str, port: u16) -> Result<SocketAddr, BoxDynError> {
     let ip_addr = IpAddr::from_str(ip_addr_str)?;
-    return Ok(SocketAddr::new(ip_addr, port));
+    Ok(SocketAddr::new(ip_addr, port))
 }
 
 fn server(listen_addr: &SocketAddr) -> Result<(), BoxDynError> {
