@@ -1,0 +1,13 @@
+[package]
+name = "ex15-server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ex15-shared = { path = "../ex15-shared" }
+thiserror = { workspace = true }
+flume = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
