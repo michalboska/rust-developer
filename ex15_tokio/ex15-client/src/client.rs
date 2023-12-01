@@ -1,60 +1,69 @@
-use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
+use std::ops::Deref;
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use flume::Receiver;
 use log::info;
 use thiserror::Error;
+use tokio::net::TcpStream;
+use tokio::sync::watch::Receiver;
+use tokio::{fs, select};
 
-use crate::client::ClientError::{ConnectError, IllegalArgumentError};
 use ex15_shared::message::Message;
 use ex15_shared::message_tcp_stream::{MessageTcpStream, MessageTcpStreamError};
 
-static DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
+use crate::client::ClientError::{ConnectError, IllegalArgumentError};
 
 pub struct Client {
     message_stream: MessageTcpStream<Message>,
-    stdin_input_rx: Receiver<Message>,
+    stdin_input_rx: Receiver<Option<Message>>,
 }
 
 impl Client {
-    pub fn new(
+    pub async fn new(
         socket_addr: &SocketAddr,
-        stdin_input_rx: Receiver<Message>,
+        stdin_input_rx: Receiver<Option<Message>>,
     ) -> Result<Client, ClientError> {
-        fs::create_dir_all("files")?;
-        fs::create_dir_all("images")?;
+        fs::create_dir_all("files").await?;
+        fs::create_dir_all("images").await?;
         info!("Connecting to {}", socket_addr);
         Ok(Client {
             message_stream: MessageTcpStream::from_tcp_stream(
-                TcpStream::connect(socket_addr).map_err(|_| ConnectError(socket_addr.clone()))?,
-                Some(DEFAULT_TIMEOUT),
+                TcpStream::connect(socket_addr)
+                    .await
+                    .map_err(|_| ConnectError(socket_addr.clone()))?,
             )?,
             stdin_input_rx,
         })
     }
 
-    pub fn process_messages(&mut self) -> Result<(), ClientError> {
+    pub async fn process_messages(&mut self) -> Result<(), ClientError> {
         loop {
-            // was there any input from stdin?
-            let result = self.stdin_input_rx.recv_timeout(DEFAULT_TIMEOUT);
-            if let Ok(message) = result {
-                self.message_stream.send_message(&message)?;
-                if matches!(message, Message::Quit) {
-                    return Ok(());
+            select! {
+                stdin_event = self.stdin_input_rx.changed() => {
+                    if stdin_event.is_err() {
+                        return Ok(());
+                    }
+                    let message_ref = self.stdin_input_rx.borrow_and_update();
+                    match message_ref.deref() {
+                        Some(Message::Quit) => {return Ok(());},
+                        Some(message) => {
+                            self.message_stream.send_message(message).await?;
+                        },
+                        None => {},
+                    }
                 }
-            }
-
-            // was there any message from server?
-            let result_option = self.message_stream.read_next_message()?;
-            if let Some(message) = result_option {
-                if matches!(message, Message::Quit) {
-                    return Ok(());
+                server_event = self.message_stream.read_next_message() => {
+                    match server_event {
+                        Ok(Some(message)) => {
+                            Client::process_message(&message)?;
+                        }
+                        Err(err) => { return Err(ClientError::from(err));}
+                        _ => {}
+                    }
                 }
-                Client::process_message(&message)?;
             }
         }
     }

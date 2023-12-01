@@ -11,7 +11,7 @@ ex15-client = { path = "../ex15-client" }
 ex15-server = { path = "../ex15-server" }
 anyhow = { workspace = true }
 clap = { workspace = true }
-flume = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
 chrono = { workspace = true }
+tokio = { workspace = true }

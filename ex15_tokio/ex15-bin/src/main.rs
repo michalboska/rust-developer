@@ -1,15 +1,15 @@
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
 use std::process::exit;
 use std::str::FromStr;
 use std::string::ToString;
-use std::{io, thread};
 
 use anyhow::{Context, Error};
 use clap::Parser;
-use flume::Sender;
 use log::LevelFilter::Debug;
 use log::{debug, error};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::watch::Sender;
 
 use ex15_client::client::Client;
 use ex15_server::server::Server;
@@ -22,7 +22,8 @@ mod cli;
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 11111;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::builder()
         .filter_level(Debug)
         .format(|buf, record| {
@@ -41,17 +42,19 @@ fn main() {
     let cli = Cli::parse();
     let address = cli.hostname.unwrap_or(DEFAULT_HOST.to_string());
     let port = cli.port.unwrap_or(DEFAULT_PORT);
-    let exec_fn = |cli_mode: Modes| {
+    let exec_fn = |cli_mode: Modes| async move {
         let socket_addr =
             get_socket_addr(&address, port).context(format!("Invalid address {}", address))?;
         match cli_mode {
-            Modes::CLIENT => client(&socket_addr),
-            Modes::SERVER => Server::<Message>::new(socket_addr)?
-                .listen_blocking()
-                .context("asd"),
+            Modes::CLIENT => client(&socket_addr).await,
+            Modes::SERVER => Server::<Message>::new(socket_addr)
+                .await?
+                .listen()
+                .await
+                .context(format!("Listening on address {} failed", socket_addr)),
         }
     };
-    if let Err(err) = exec_fn(cli.mode) {
+    if let Err(err) = exec_fn(cli.mode).await {
         error!("{}", err);
         exit(1);
     }
@@ -62,45 +65,31 @@ fn get_socket_addr(ip_addr_str: &str, port: u16) -> Result<SocketAddr, Error> {
     return Ok(SocketAddr::new(ip_addr, port));
 }
 
-fn client(socket_addr: &SocketAddr) -> Result<(), Error> {
-    let (tx, rx) = flume::unbounded();
-    thread::spawn(move || {
-        client_stdin_reader(tx);
+async fn client(socket_addr: &SocketAddr) -> Result<(), Error> {
+    let (tx, rx) = tokio::sync::watch::channel(None);
+
+    tokio::spawn(async {
+        client_stdin_reader(tx).await.unwrap();
     });
-    let mut client = Client::new(socket_addr, rx)?;
-    client.process_messages()?;
+
+    let mut client = Client::new(socket_addr, rx).await?;
+    client.process_messages().await?;
     Ok(())
 }
 
-fn client_stdin_reader(message_tx: Sender<Message>) {
-    let mut stdin_lock = io::stdin().lock();
-    let mut buf = String::new();
+async fn client_stdin_reader(message_tx: Sender<Option<Message>>) -> Result<(), Error> {
     loop {
-        buf.clear();
-        let read_result = stdin_lock.read_line(&mut buf);
-        let buf_trim = buf.trim();
-        match read_result {
-            Ok(0) => {
-                debug!("stdin is empty, exitting...");
-                exit(0);
-            }
-            Ok(_) => match Message::from_str(buf_trim) {
-                Ok(message) => {
-                    debug!("Read valid message: {}", buf_trim);
-                    if matches!(message, Message::Quit) {
-                        break;
-                    } else {
-                        message_tx.send(message).unwrap();
-                    }
-                }
-                Err(err) => {
-                    error!("{}", err);
-                }
-            },
-            Err(err) => {
-                error!("{}", err);
-                break;
-            }
+        let mut buf = String::new();
+        let mut reader = BufReader::new(tokio::io::stdin());
+        let read_bytes = reader
+            .read_line(&mut buf)
+            .await
+            .context("Could not read from stdin")?;
+        if read_bytes == 0 {
+            debug!("stdin is empty, exitting...");
+            return Ok(());
         }
+        let message = Message::from_str(buf.trim()).await?;
+        message_tx.send(Some(message))?;
     }
 }

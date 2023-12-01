@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 ex15-shared = { path = "../ex15-shared" }
 thiserror = { workspace = true }
-flume = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true }
