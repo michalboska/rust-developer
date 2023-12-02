@@ -11,3 +11,7 @@ thiserror = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
+sqlx = { workspace = true }
+sha256 = { workspace = true }
+uuid = { workspace = true }
+lazy_static = { workspace = true }

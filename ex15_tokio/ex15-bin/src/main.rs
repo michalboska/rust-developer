@@ -8,7 +8,7 @@ use anyhow::{Context, Error};
 use clap::Parser;
 use log::LevelFilter::Debug;
 use log::{debug, error};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::watch::Sender;
 
 use ex15_client::client::Client;
@@ -47,7 +47,7 @@ async fn main() {
             get_socket_addr(&address, port).context(format!("Invalid address {}", address))?;
         match cli_mode {
             Modes::CLIENT => client(&socket_addr).await,
-            Modes::SERVER => Server::<Message>::new(socket_addr)
+            Modes::SERVER => Server::new(socket_addr)
                 .await?
                 .listen()
                 .await
@@ -62,7 +62,7 @@ async fn main() {
 
 fn get_socket_addr(ip_addr_str: &str, port: u16) -> Result<SocketAddr, Error> {
     let ip_addr = IpAddr::from_str(ip_addr_str)?;
-    return Ok(SocketAddr::new(ip_addr, port));
+    Ok(SocketAddr::new(ip_addr, port))
 }
 
 async fn client(socket_addr: &SocketAddr) -> Result<(), Error> {
@@ -89,7 +89,14 @@ async fn client_stdin_reader(message_tx: Sender<Option<Message>>) -> Result<(), 
             debug!("stdin is empty, exitting...");
             return Ok(());
         }
-        let message = Message::from_str(buf.trim()).await?;
-        message_tx.send(Some(message))?;
+        let message_result = Message::from_str(buf.trim()).await;
+        match message_result {
+            Ok(message) => {
+                message_tx.send(Some(message))?;
+            }
+            Err(err) => {
+                eprintln!("{}", err);
+            }
+        }
     }
 }

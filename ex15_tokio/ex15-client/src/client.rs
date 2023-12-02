@@ -14,7 +14,9 @@ use tokio::{fs, select};
 use ex15_shared::message::Message;
 use ex15_shared::message_tcp_stream::{MessageTcpStream, MessageTcpStreamError};
 
-use crate::client::ClientError::{ConnectError, IllegalArgumentError};
+use crate::client::ClientError::{
+    ConnectError, IllegalArgumentError, IncorrectTransmitByteCountError,
+};
 
 pub struct Client {
     message_stream: MessageTcpStream<Message>,
@@ -105,8 +107,15 @@ impl Client {
             .truncate(true)
             .create(true)
             .open(path_str)?;
-        file.write(content)?;
-        Ok(())
+        let bytes_written = file.write(content)?;
+        if bytes_written == content.len() {
+            Ok(())
+        } else {
+            Err(IncorrectTransmitByteCountError(
+                content.len(),
+                bytes_written,
+            ))
+        }
     }
 
     fn get_file_name_from_path(path_str: &str) -> Result<&str, ClientError> {
@@ -133,4 +142,6 @@ pub enum ClientError {
     InvalidFsPathError(Box<Path>),
     #[error("{0}")]
     IllegalArgumentError(String),
+    #[error("Expected to read {0} bytes, actually read {1} bytes")]
+    IncorrectTransmitByteCountError(usize, usize),
 }

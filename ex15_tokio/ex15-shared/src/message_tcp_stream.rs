@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use std::marker::PhantomData;
+use std::mem;
 
 use bincode::{deserialize, serialize};
 use log::{debug, error};
@@ -8,6 +9,8 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+
+use crate::message_tcp_stream::MessageTcpStreamError::IncorrectTransmitByteCountError;
 
 pub struct MessageTcpStream<T> {
     tcp_stream: TcpStream,
@@ -27,15 +30,18 @@ impl<T: Serialize + DeserializeOwned> MessageTcpStream<T> {
     pub async fn read_next_message(&mut self) -> Result<Option<T>, MessageTcpStreamError> {
         let read_fn = async {
             let mut size_buf = [0u8; 4];
-            self.tcp_stream.read(&mut size_buf).await?;
-
+            let expected_read = 4 * mem::size_of::<u8>();
+            let bytes_read = self.tcp_stream.read(&mut size_buf).await?;
+            if bytes_read != expected_read {
+                return Err(IncorrectTransmitByteCountError(expected_read, bytes_read));
+            }
             let message_size = u32::from_le_bytes(size_buf);
             if message_size == 0 {
                 return Ok::<Option<Vec<u8>>, MessageTcpStreamError>(None);
             }
             Ok(Some(self.read_next_n_bytes(message_size as usize).await?))
         };
-        return match read_fn.await {
+        match read_fn.await {
             Ok(Some(message_bytes)) => {
                 debug!("Read binary message: {:?}", message_bytes);
                 Ok(Some(deserialize(&message_bytes[..])?))
@@ -45,7 +51,7 @@ impl<T: Serialize + DeserializeOwned> MessageTcpStream<T> {
             }
             Err(e) => Err(e),
             Ok(None) => Ok(None),
-        };
+        }
     }
 
     pub async fn send_message(&mut self, message: &T) -> Result<(), MessageTcpStreamError> {
@@ -53,10 +59,18 @@ impl<T: Serialize + DeserializeOwned> MessageTcpStream<T> {
         debug!("Serialized data: {:?}", vec);
         let size = vec.len() as u32;
         let size_byte_slice = u32::to_le_bytes(size);
-        self.tcp_stream.write(&size_byte_slice).await?;
-        self.tcp_stream.write(&vec).await?;
+        let expected_bytes_written = mem::size_of::<u32>() + vec.len() * mem::size_of::<u8>();
+        let bytes_written =
+            self.tcp_stream.write(&size_byte_slice).await? + self.tcp_stream.write(&vec).await?;
         self.tcp_stream.flush().await?;
-        Ok(())
+        if bytes_written == expected_bytes_written {
+            Ok(())
+        } else {
+            Err(IncorrectTransmitByteCountError(
+                expected_bytes_written,
+                bytes_written,
+            ))
+        }
     }
 
     async fn read_next_n_bytes(&mut self, n: usize) -> Result<Vec<u8>, MessageTcpStreamError> {
@@ -75,4 +89,6 @@ pub enum MessageTcpStreamError {
     SerdeError(#[from] bincode::Error),
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+    #[error("Expected to read {0} bytes, actually read {1} bytes")]
+    IncorrectTransmitByteCountError(usize, usize),
 }
