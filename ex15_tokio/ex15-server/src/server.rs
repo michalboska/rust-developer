@@ -31,14 +31,6 @@ struct BroadcastMessage {
     message: Message,
 }
 
-struct UserSession {
-    socket_addr: SocketAddr,
-    tcp_stream: MessageTcpStream<Message>,
-    broadcaster: Sender<Arc<BroadcastMessage>>,
-    user_service: Arc<UserService>,
-    logged_user: Option<User>,
-}
-
 impl Server {
     pub async fn new(socket_addr: SocketAddr) -> Result<Server, ServerError> {
         info!("Listening on {}", socket_addr);
@@ -90,6 +82,14 @@ impl Server {
             });
         }
     }
+}
+
+struct UserSession {
+    socket_addr: SocketAddr,
+    tcp_stream: MessageTcpStream<Message>,
+    broadcaster: Sender<Arc<BroadcastMessage>>,
+    user_service: Arc<UserService>,
+    logged_user: Option<User>,
 }
 
 impl UserSession {
