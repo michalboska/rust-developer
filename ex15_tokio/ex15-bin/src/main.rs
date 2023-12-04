@@ -6,7 +6,7 @@ use std::string::ToString;
 
 use anyhow::{Context, Error};
 use clap::Parser;
-use log::LevelFilter::Debug;
+use log::LevelFilter::{Debug, Info};
 use log::{debug, error};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::watch::Sender;
@@ -25,7 +25,7 @@ const DEFAULT_PORT: u16 = 11111;
 #[tokio::main]
 async fn main() {
     env_logger::builder()
-        .filter_level(Debug)
+        .filter_level(Info)
         .format(|buf, record| {
             buf.write_fmt(format_args!(
                 "{}:{} {} [{}] - {}\n",
