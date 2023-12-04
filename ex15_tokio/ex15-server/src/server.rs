@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -115,7 +115,7 @@ impl UserSession {
                                     self.logged_user = Some(user);
                                     self.send_text_reply(&format!("Welcome, {}", login)).await?;
                                 },
-                                Err(UserError::UserAlreadyExistsError(_)) => {
+                                Err(UserError::UserAlreadyExists(_)) => {
                                     self.send_text_reply(&format!("Username {} already exists!", login)).await?;
                                 }
                                 Err(err) => {
@@ -129,7 +129,7 @@ impl UserSession {
                                     self.logged_user = Some(user);
                                     self.send_text_reply(&format!("Welcome, {}", login)).await?;
                                 },
-                                Err(UserError::AuthenticationFailedError) => {
+                                Err(UserError::AuthenticationFailed) => {
                                     self.send_text_reply("Authentication failure").await?
                                 }
                                 Err(err) => {
@@ -141,7 +141,6 @@ impl UserSession {
                         Ok(Some(_)) => {
                             self.send_text_reply("Permission denied, login first using .login <username> <password>").await?;
                         }
-                        Err(stream_err) => {return Err(ServerError::from(stream_err));},
                         _ => (),
                     }
                 }

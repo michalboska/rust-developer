@@ -3,15 +3,13 @@ use std::time::SystemTime;
 
 use lazy_static::lazy_static;
 use log::info;
-use sqlx::{Acquire, Executor, Pool, Row, Sqlite, Transaction};
+use sqlx::{Acquire, Pool, Row, Sqlite, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
 use ex15_shared::message::Message;
 
-use crate::users::UserError::{
-    AuthenticationFailedError, NoSuchUserError, SqlError, UserAlreadyExistsError,
-};
+use crate::users::UserError::{AuthenticationFailed, NoSuchUser, Sql, UserAlreadyExists};
 
 pub type UserResult<T> = Result<T, UserError>;
 pub type UserResultVoid = UserResult<()>;
@@ -33,13 +31,13 @@ struct DbUser {
 #[derive(Debug, Error)]
 pub enum UserError {
     #[error(transparent)]
-    SqlError(#[from] sqlx::Error),
+    Sql(#[from] sqlx::Error),
     #[error("User with name {0} not found")]
-    NoSuchUserError(String),
+    NoSuchUser(String),
     #[error("User with name {0} already exists")]
-    UserAlreadyExistsError(String),
+    UserAlreadyExists(String),
     #[error("Authentication failed")]
-    AuthenticationFailedError,
+    AuthenticationFailed,
 }
 
 pub struct UserService {
@@ -56,7 +54,7 @@ impl UserService {
     pub async fn authenticate(&self, username: &str, password: &str) -> UserResult<User> {
         let mut tx = self.pool.begin().await?;
         match UserService::get_user_by_name(&mut tx, username).await? {
-            None => Err(AuthenticationFailedError),
+            None => Err(AuthenticationFailed),
             Some(db_user) => {
                 let expected_digest = UserService::get_passwd_digest(password, &db_user.salt);
                 if db_user.active == 1 && db_user.password == expected_digest {
@@ -65,7 +63,7 @@ impl UserService {
                         name: db_user.name,
                     })
                 } else {
-                    Err(AuthenticationFailedError)
+                    Err(AuthenticationFailed)
                 }
             }
         }
@@ -74,7 +72,7 @@ impl UserService {
     pub async fn signup(&self, username: &str, password: &str) -> UserResult<User> {
         let mut tx = self.pool.begin().await?;
         match UserService::get_user_by_name(&mut tx, username).await? {
-            Some(_) => Err(UserAlreadyExistsError(username.to_string())),
+            Some(_) => Err(UserAlreadyExists(username.to_string())),
             None => {
                 let new_id = Uuid::new_v4().to_string();
                 let salt = Uuid::new_v4().to_string();
@@ -112,7 +110,7 @@ impl UserService {
             tx.commit().await?;
             Ok(())
         } else {
-            Err(NoSuchUserError(user.name.clone()))
+            Err(NoSuchUser(user.name.clone()))
         }
     }
 
@@ -150,7 +148,7 @@ impl UserService {
             .bind(name)
             .fetch_optional(&mut **tx)
             .await
-            .map_err(|err| UserError::from(err))
+            .map_err(UserError::from)
     }
 
     fn get_passwd_digest(passwd: &str, salt: &str) -> String {
@@ -181,8 +179,8 @@ impl UserService {
             let result = sqlx::query(sql)
                 .execute(&mut *tx)
                 .await
-                .and_then(|_| Ok(()))
-                .map_err(|err| SqlError(err));
+                .map(|_| ())
+                .map_err(Sql);
             if result.is_err() {
                 return result;
             }

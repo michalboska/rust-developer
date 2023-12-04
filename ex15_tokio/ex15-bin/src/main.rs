@@ -6,9 +6,9 @@ use std::string::ToString;
 
 use anyhow::{Context, Error};
 use clap::Parser;
-use log::LevelFilter::{Debug, Info};
+use log::LevelFilter::Info;
 use log::{debug, error};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::watch::Sender;
 
 use ex15_client::client::Client;
