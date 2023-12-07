@@ -13,3 +13,4 @@ bincode = { workspace = true }
 regex = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true }
+rand = "0.8.5"

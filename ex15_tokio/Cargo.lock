@@ -501,6 +501,7 @@ dependencies = [
  "bincode",
  "lazy_static",
  "log",
+ "rand",
  "regex",
  "serde",
  "serde_derive",
