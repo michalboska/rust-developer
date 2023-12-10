@@ -1,0 +1,13 @@
+[package]
+name = "ex17-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ex17-shared = { path = "../ex17-shared" }
+thiserror = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+rocket = { workspace = true }
