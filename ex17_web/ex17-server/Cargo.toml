@@ -10,6 +10,7 @@ ex17-shared = { path = "../ex17-shared" }
 thiserror = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
+serde_derive = { workspace = true }
 sqlx = { workspace = true }
 sha256 = { workspace = true }
 uuid = { workspace = true }

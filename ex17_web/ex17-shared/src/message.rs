@@ -28,31 +28,6 @@ pub enum Message {
 
 impl Message {
     /// Creates an instance of `Message` from provided `&str`
-    ///
-    /// #Examples
-    ///
-    ///```
-    /// #[rocket::tokio::main]
-    /// async fn main() {
-    ///
-    ///     use rocket::tokio;use ex17_shared::message::Message;
-    ///     let result = Message::from_str(".quit").await;
-    ///
-    ///     assert!(matches!(result, Ok(Message::Quit)));
-    /// }
-    /// ```
-    /// It can also return Err(String) if the provided values were incorrect:
-    ///
-    /// ```
-    /// #[rocket::tokio::main]
-    /// async fn main() {
-    ///
-    ///     use ex17_shared::message::Message;
-    ///     let result = Message::from_str(".passwd abc def").await;
-    ///
-    ///     assert!(matches!(result, Err(_)));
-    /// }
-    ///```
     pub async fn from_str(str: &str) -> Result<Message> {
         if let Some(caps) = REGEX_COMPLEX.captures(str) {
             let arg = caps.get(3).unwrap().as_str();
@@ -120,8 +95,9 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
-    use crate::message::Message;
     use rocket::tokio;
+
+    use crate::message::Message;
 
     #[tokio::test]
     async fn from_str_creates_a_text_message() {

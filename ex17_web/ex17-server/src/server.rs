@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use log::{error, info};
 use rocket::tokio;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::select;
@@ -18,12 +17,10 @@ use crate::users::{User, UserError, UserService};
 
 const CAPACITY: usize = 20;
 const ECONNRESET: i32 = 54;
-const SQLITE_DB_FILE: &str = "server.db";
 
 pub struct Server {
     listener: TcpListener,
     broadcaster: Sender<Arc<BroadcastMessage>>,
-    user_service: Arc<UserService>,
 }
 
 #[derive(Debug)]
@@ -36,22 +33,17 @@ impl Server {
     pub async fn new(socket_addr: SocketAddr) -> Result<Server, ServerError> {
         info!("Listening on {}", socket_addr);
 
+        tokio::task::spawn_blocking(|| UserService::instance())
+            .await
+            .map_err(|err| ServerError::GeneralError(err.to_string()))?;
+
         let listener = TcpListener::bind(socket_addr)
             .await
             .map_err(|_| AddressInUseError(socket_addr))?;
 
-        let connect_options = SqliteConnectOptions::new()
-            .filename(SQLITE_DB_FILE)
-            .create_if_missing(true);
-        let pool = SqlitePoolOptions::new()
-            .connect_with(connect_options)
-            .await?;
-        let user_service = UserService::new(pool).await?;
-
         Ok(Server {
             listener,
             broadcaster: channel(CAPACITY).0,
-            user_service: Arc::new(user_service),
         })
     }
 
@@ -64,8 +56,8 @@ impl Server {
                 logged_user: None,
                 socket_addr,
                 tcp_stream: message_tcp_stream,
+                user_service: UserService::instance(),
                 broadcaster,
-                user_service: Arc::clone(&self.user_service),
             };
 
             tokio::spawn(async move {
@@ -85,17 +77,18 @@ impl Server {
     }
 }
 
-struct UserSession {
+struct UserSession<'a> {
     socket_addr: SocketAddr,
     tcp_stream: MessageTcpStream<Message>,
     broadcaster: Sender<Arc<BroadcastMessage>>,
-    user_service: Arc<UserService>,
+    user_service: &'a UserService,
     logged_user: Option<User>,
 }
 
-impl UserSession {
+impl<'a> UserSession<'a> {
     pub async fn run(&mut self) -> Result<(), ServerError> {
         let mut broadcast_sub = self.broadcaster.subscribe();
+        // let user_serv
         loop {
             select! {
                 broadcast_msg_try = broadcast_sub.recv() => {

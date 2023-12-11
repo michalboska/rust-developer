@@ -1,8 +1,12 @@
 use std::ops::Deref;
+use std::sync::OnceLock;
 use std::time::SystemTime;
 
 use lazy_static::lazy_static;
 use log::info;
+use rocket::tokio::runtime::Handle;
+use serde_derive::Serialize;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Acquire, Pool, Row, Sqlite, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
@@ -14,9 +18,14 @@ use crate::users::UserError::{AuthenticationFailed, NoSuchUser, Sql, UserAlready
 pub type UserResult<T> = Result<T, UserError>;
 pub type UserResultVoid = UserResult<()>;
 
+const SQLITE_DB_FILE: &str = "server.db";
+static INSTANCE: OnceLock<UserService> = OnceLock::new();
+
+#[derive(Serialize)]
 pub struct User {
     pub id: String,
     pub name: String,
+    pub is_admin: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -24,8 +33,16 @@ struct DbUser {
     id: String,
     name: String,
     active: u8,
+    admin: u8,
     password: String,
     salt: String,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+pub struct UserMessageView {
+    pub author_name: String,
+    pub message: String,
+    pub sent_at_instant: i64,
 }
 
 #[derive(Debug, Error)]
@@ -45,10 +62,29 @@ pub struct UserService {
 }
 
 impl UserService {
-    pub async fn new(pool: Pool<Sqlite>) -> Result<UserService, UserError> {
-        let inst = UserService { pool };
-        inst.ensure_schema_exists().await?;
-        Ok(inst)
+    pub fn instance() -> &'static UserService {
+        INSTANCE
+            .get_or_init(|| Handle::current().block_on(async { UserService::new().await.unwrap() }))
+    }
+
+    pub async fn get_all_users(&self) -> UserResult<Vec<User>> {
+        Ok(sqlx::query_as::<Sqlite, DbUser>("select * from users")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(User::from)
+            .collect::<Vec<User>>())
+    }
+
+    pub async fn get_user_by_id(&self, id: &str) -> UserResult<User> {
+        sqlx::query_as::<Sqlite, DbUser>(
+            "select id,name,active,admin,password,salt from users where id=?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(User::from)
+        .ok_or(NoSuchUser(id.to_string()))
     }
 
     pub async fn authenticate(&self, username: &str, password: &str) -> UserResult<User> {
@@ -58,10 +94,7 @@ impl UserService {
             Some(db_user) => {
                 let expected_digest = UserService::get_passwd_digest(password, &db_user.salt);
                 if db_user.active == 1 && db_user.password == expected_digest {
-                    Ok(User {
-                        id: db_user.id,
-                        name: db_user.name,
-                    })
+                    Ok(User::from(db_user))
                 } else {
                     Err(AuthenticationFailed)
                 }
@@ -91,6 +124,7 @@ impl UserService {
                 Ok(User {
                     id: new_id,
                     name: username.to_string(),
+                    is_admin: false,
                 })
             }
         }
@@ -112,6 +146,18 @@ impl UserService {
         } else {
             Err(NoSuchUser(user.name.clone()))
         }
+    }
+
+    pub async fn get_user_messages(&self) -> UserResult<Vec<UserMessageView>> {
+        Ok(sqlx::query_as::<Sqlite, UserMessageView>(
+            r#"
+        select u.name as author_name, m.message, m.sent_at_instant
+        from user_messages m
+                 join main.users u on u.id = m.author_id
+        order by m.sent_at_instant desc"#,
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub async fn save_user_message(&self, user: &User, message: &Message) -> UserResultVoid {
@@ -144,7 +190,7 @@ impl UserService {
         tx: &mut Transaction<'_, Sqlite>,
         name: &str,
     ) -> UserResult<Option<DbUser>> {
-        sqlx::query_as("select id,name,active,password,salt from users where name=?")
+        sqlx::query_as("select id,name,active,admin,password,salt from users where name=?")
             .bind(name)
             .fetch_optional(&mut **tx)
             .await
@@ -154,6 +200,18 @@ impl UserService {
     fn get_passwd_digest(passwd: &str, salt: &str) -> String {
         let passwd_with_salt = format!("{}{}", passwd, salt);
         sha256::digest(passwd_with_salt)
+    }
+
+    async fn new() -> Result<UserService, UserError> {
+        let connect_options = SqliteConnectOptions::new()
+            .filename(SQLITE_DB_FILE)
+            .create_if_missing(true);
+        let pool = SqlitePoolOptions::new()
+            .connect_with(connect_options)
+            .await?;
+        let inst = UserService { pool };
+        inst.ensure_schema_exists().await?;
+        Ok(inst)
     }
 
     async fn ensure_schema_exists(&self) -> Result<(), UserError> {
@@ -199,6 +257,7 @@ lazy_static! {
                 primary key,
         name     TEXT,
         active   INTEGER,
+        admin    INTEGER default 0,
         password TEXT not null,
         salt     TEXT not null
     );
@@ -216,6 +275,7 @@ lazy_static! {
     );
     "##,
         "create index idx_user_messages_author_id on user_messages (author_id);",
+        "create index idx_user_messages_sent_at on user_messages (sent_at_instant desc);",
     ];
 }
 
@@ -224,6 +284,7 @@ impl From<DbUser> for User {
         User {
             id: value.id,
             name: value.name,
+            is_admin: value.admin > 0,
         }
     }
 }
