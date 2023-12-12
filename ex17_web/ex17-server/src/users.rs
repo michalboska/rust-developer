@@ -25,6 +25,7 @@ static INSTANCE: OnceLock<UserService> = OnceLock::new();
 pub struct User {
     pub id: String,
     pub name: String,
+    pub is_active: bool,
     pub is_admin: bool,
 }
 
@@ -124,9 +125,31 @@ impl UserService {
                 Ok(User {
                     id: new_id,
                     name: username.to_string(),
+                    is_active: true,
                     is_admin: false,
                 })
             }
+        }
+    }
+
+    pub async fn update_user(
+        &self,
+        user_id: &str,
+        is_admin: bool,
+        is_active: bool,
+    ) -> UserResultVoid {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("update users set active=?, admin=? where id=?")
+            .bind(if is_active { 1 } else { 0 })
+            .bind(if is_admin { 1 } else { 0 })
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        if result.rows_affected() > 0 {
+            tx.commit().await?;
+            Ok(())
+        } else {
+            Err(NoSuchUser(user_id.to_string()))
         }
     }
 
@@ -284,6 +307,7 @@ impl From<DbUser> for User {
         User {
             id: value.id,
             name: value.name,
+            is_active: value.active > 0,
             is_admin: value.admin > 0,
         }
     }

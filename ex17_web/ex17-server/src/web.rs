@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
@@ -11,7 +12,7 @@ use rocket_dyn_templates::{context, Template};
 use thiserror::Error;
 
 use crate::users::{UserError, UserService};
-use crate::web_auth::{LoggedUser, LoginForm};
+use crate::web_user::{LoggedUser, LoginForm, RegisterUserForm, UpdateUserForm};
 
 const ASSETS_DIR: &str = "ex17-server/public";
 
@@ -33,6 +34,8 @@ pub async fn serve_web(addr: SocketAddr) -> Result<(), rocket::Error> {
                 login,
                 login_execute,
                 login_redirect,
+                signup,
+                update_user,
                 assets
             ],
         )
@@ -83,6 +86,34 @@ async fn login_execute(
     } else {
         Err(failed_login())
     }
+}
+
+#[post("/update-user", data = "<update_user_form>")]
+async fn update_user(
+    _user: LoggedUser,
+    update_user_form: Form<UpdateUserForm>,
+) -> Result<Redirect, Status> {
+    UserService::instance()
+        .update_user(
+            &update_user_form.user_id,
+            update_user_form.is_admin,
+            update_user_form.is_active,
+        )
+        .await
+        .map_err(|_| Status::InternalServerError)
+        .map(|_| Redirect::to("/"))
+}
+
+#[post("/signup", data = "<signup_form>")]
+async fn signup(
+    _user: LoggedUser,
+    signup_form: Form<RegisterUserForm>,
+) -> Result<Redirect, Status> {
+    UserService::instance()
+        .signup(&signup_form.login, &signup_form.password)
+        .await
+        .map_err(|_| Status::InternalServerError)
+        .map(|_| Redirect::to("/"))
 }
 
 #[get("/static/<asset..>")]

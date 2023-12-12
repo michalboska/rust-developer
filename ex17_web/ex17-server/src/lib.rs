@@ -1,4 +1,4 @@
 pub mod server;
 mod users;
 pub mod web;
-mod web_auth;
+mod web_user;

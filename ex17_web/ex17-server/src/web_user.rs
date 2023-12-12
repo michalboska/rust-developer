@@ -40,3 +40,16 @@ pub struct LoginForm {
     pub login: String,
     pub password: String,
 }
+
+#[derive(FromForm)]
+pub struct UpdateUserForm {
+    pub user_id: String,
+    pub is_active: bool,
+    pub is_admin: bool,
+}
+
+#[derive(FromForm)]
+pub struct RegisterUserForm {
+    pub login: String,
+    pub password: String,
+}

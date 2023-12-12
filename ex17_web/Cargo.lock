@@ -726,6 +726,7 @@ dependencies = [
 name = "ex17-server"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ex17-shared",
  "lazy_static",
  "log",
