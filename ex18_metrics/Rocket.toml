@@ -1,0 +1,3 @@
+[global]
+template_dir = "ex18-server/templates"
+secret_key = "S5X1ZuIFNPQ7wugRwq2VMTlxtTpCJkEQ+SgFtoS2EL8="

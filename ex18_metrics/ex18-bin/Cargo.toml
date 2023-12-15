@@ -1,0 +1,17 @@
+[package]
+name = "ex18-bin"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ex18-shared = { path = "../ex18-shared" }
+ex18-client = { path = "../ex18-client" }
+ex18-server = { path = "../ex18-server" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+chrono = { workspace = true }
+rocket = { workspace = true }

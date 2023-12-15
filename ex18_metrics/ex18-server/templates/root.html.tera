@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="static/bootstrap.min.css">
+    <link rel="stylesheet" href="static/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="static/font-awesome/css/font-awesome.css">
+    <title>Chat admin</title>
+</head>
+<body>
+<div class="container-fluid">
+    <h1>{% block headline %}Chat admin{% endblock %}</h1>
+
+    {% block body %}
+    {% endblock %}
+</div>
+<script src="static/jquery.min.js"/>
+<script src="static/bootstrap.min.js"/>
+</body>
+</html>

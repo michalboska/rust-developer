@@ -1,0 +1,7 @@
+{% macro bool_radios(name, value) %}
+    <i class="fa fa-check-square text-success"></i>
+    <input type="radio" name="{{ name }}" value="true" {% if value %} checked="checked" {% endif %}>
+    &nbsp;
+    <i class="fa fa-times-rectangle text-danger"></i>
+    <input type="radio" name="{{ name }}" value="false" {% if value == false %} checked="checked" {% endif %}>
+{% endmacro %}

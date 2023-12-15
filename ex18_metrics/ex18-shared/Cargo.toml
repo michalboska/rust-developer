@@ -1,0 +1,16 @@
+[package]
+name = "ex18-shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_derive = { workspace = true }
+bincode = { workspace = true }
+regex = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+rocket = { workspace = true }
