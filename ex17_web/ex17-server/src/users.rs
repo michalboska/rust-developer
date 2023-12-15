@@ -267,6 +267,9 @@ impl UserService {
             }
         }
         tx.commit().await?;
+        let admin_user = self.signup("admin", "admin").await?;
+        self.update_user(&admin_user.id, true, true).await?;
+        info!("Created first admin user: admin/admin don't forget to change the credentials.");
         Ok(())
     }
 }
