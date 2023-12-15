@@ -12,6 +12,7 @@ services:
     ports:
       - 9090:9090
   grafana:
+    depends_on: prometheus
     image: grafana/grafana-enterprise
     volumes:
       - ./grafana-prometheus.yml:/etc/grafana/provisioning/datasources/grafana-prometheus.yml
