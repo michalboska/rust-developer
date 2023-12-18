@@ -1,5 +1,8 @@
 # Chat server
 
+## Administrative access
+For the first time the server starts, a user with administrative access is created with login `admin` and password `admin`.
+
 ## Running locally
 
 Cwd to the root folder (usually where this readme is located) and run `./cargo run client` or `./cargo run server`. See `./cargo run` help for additional options.
