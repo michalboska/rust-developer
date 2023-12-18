@@ -18,3 +18,4 @@ uuid = { workspace = true }
 lazy_static = { workspace = true }
 rocket = { workspace = true }
 rocket_dyn_templates = { workspace = true }
+prometheus = { workspace = true }

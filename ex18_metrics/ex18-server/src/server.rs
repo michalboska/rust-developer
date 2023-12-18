@@ -9,6 +9,7 @@ use tokio::net::TcpListener;
 use tokio::select;
 use tokio::sync::broadcast::{channel, Sender};
 
+use crate::metrics::Metrics;
 use ex18_shared::message::Message;
 use ex18_shared::message_tcp_stream::{MessageTcpStream, MessageTcpStreamError};
 
@@ -33,9 +34,12 @@ impl Server {
     pub async fn new(socket_addr: SocketAddr) -> Result<Server, ServerError> {
         info!("Listening on {}", socket_addr);
 
-        tokio::task::spawn_blocking(|| UserService::instance())
-            .await
-            .map_err(|err| ServerError::GeneralError(err.to_string()))?;
+        tokio::task::spawn_blocking(|| {
+            UserService::instance();
+            Metrics::instance();
+        })
+        .await
+        .map_err(|err| ServerError::GeneralError(err.to_string()))?;
 
         let listener = TcpListener::bind(socket_addr)
             .await
@@ -61,6 +65,7 @@ impl Server {
             };
 
             tokio::spawn(async move {
+                Metrics::instance().track_user_connected();
                 match session.run().await {
                     Err(ServerError::TcpStreamError(MessageTcpStreamError::IOError(err)))
                         if err.raw_os_error() == Some(ECONNRESET) =>
@@ -72,6 +77,7 @@ impl Server {
                     }
                     _ => {}
                 }
+                Metrics::instance().track_user_disconnected();
             });
         }
     }
@@ -88,7 +94,8 @@ struct UserSession<'a> {
 impl<'a> UserSession<'a> {
     pub async fn run(&mut self) -> Result<(), ServerError> {
         let mut broadcast_sub = self.broadcaster.subscribe();
-        // let user_serv
+        self.send_text_reply("Welcome! Please login with .login <username> <password>")
+            .await?;
         loop {
             select! {
                 broadcast_msg_try = broadcast_sub.recv() => {
@@ -156,6 +163,7 @@ impl<'a> UserSession<'a> {
                 self.send_text_reply("Password updated successfully").await
             }
             _ => {
+                Metrics::instance().track_message_sent();
                 self.user_service.save_user_message(user, &message).await?;
                 self.broadcaster
                     .send(Arc::new(BroadcastMessage {

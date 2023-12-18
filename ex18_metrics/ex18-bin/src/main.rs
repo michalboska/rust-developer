@@ -21,7 +21,7 @@ use crate::cli::{Cli, Modes};
 
 mod cli;
 
-const DEFAULT_HOST: &str = "127.0.0.1";
+const DEFAULT_HOST: &str = "0.0.0.0";
 const DEFAULT_PORT: u16 = 11111;
 const DEFAULT_PORT_WEB: u16 = 8080;
 

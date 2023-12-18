@@ -1,9 +1,10 @@
+use std::future::Future;
 use std::ops::Deref;
 use std::sync::OnceLock;
 use std::time::SystemTime;
 
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn};
 use rocket::tokio::runtime::Handle;
 use serde_derive::Serialize;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -13,6 +14,7 @@ use uuid::Uuid;
 
 use ex18_shared::message::Message;
 
+use crate::metrics::Metrics;
 use crate::users::UserError::{AuthenticationFailed, NoSuchUser, Sql, UserAlreadyExists};
 
 pub type UserResult<T> = Result<T, UserError>;
@@ -69,20 +71,23 @@ impl UserService {
     }
 
     pub async fn get_all_users(&self) -> UserResult<Vec<User>> {
-        Ok(sqlx::query_as::<Sqlite, DbUser>("select * from users")
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(User::from)
-            .collect::<Vec<User>>())
+        Ok(UserService::run_sql_metered(
+            sqlx::query_as::<Sqlite, DbUser>("select * from users").fetch_all(&self.pool),
+        )
+        .await?
+        .into_iter()
+        .map(User::from)
+        .collect::<Vec<User>>())
     }
 
     pub async fn get_user_by_id(&self, id: &str) -> UserResult<User> {
-        sqlx::query_as::<Sqlite, DbUser>(
-            "select id,name,active,admin,password,salt from users where id=?",
+        UserService::run_sql_metered(
+            sqlx::query_as::<Sqlite, DbUser>(
+                "select id,name,active,admin,password,salt from users where id=?",
+            )
+            .bind(id)
+            .fetch_optional(&self.pool),
         )
-        .bind(id)
-        .fetch_optional(&self.pool)
         .await?
         .map(User::from)
         .ok_or(NoSuchUser(id.to_string()))
@@ -111,15 +116,17 @@ impl UserService {
                 let new_id = Uuid::new_v4().to_string();
                 let salt = Uuid::new_v4().to_string();
                 let passwd_digest = UserService::get_passwd_digest(password, &salt);
-                sqlx::query(
-                    "insert into users(id, name, active, salt, password) values(?,?,?,?,?)",
+                UserService::run_sql_metered(
+                    sqlx::query(
+                        "insert into users(id, name, active, salt, password) values(?,?,?,?,?)",
+                    )
+                    .bind(&new_id)
+                    .bind(username)
+                    .bind(1)
+                    .bind(salt)
+                    .bind(passwd_digest)
+                    .execute(&mut *tx),
                 )
-                .bind(&new_id)
-                .bind(username)
-                .bind(1)
-                .bind(salt)
-                .bind(passwd_digest)
-                .execute(&mut *tx)
                 .await?;
                 tx.commit().await?;
                 Ok(User {
@@ -139,12 +146,14 @@ impl UserService {
         is_active: bool,
     ) -> UserResultVoid {
         let mut tx = self.pool.begin().await?;
-        let result = sqlx::query("update users set active=?, admin=? where id=?")
-            .bind(if is_active { 1 } else { 0 })
-            .bind(if is_admin { 1 } else { 0 })
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await?;
+        let result = UserService::run_sql_metered(
+            sqlx::query("update users set active=?, admin=? where id=?")
+                .bind(if is_active { 1 } else { 0 })
+                .bind(if is_admin { 1 } else { 0 })
+                .bind(user_id)
+                .execute(&mut *tx),
+        )
+        .await?;
         if result.rows_affected() > 0 {
             tx.commit().await?;
             Ok(())
@@ -157,12 +166,14 @@ impl UserService {
         let mut tx = self.pool.begin().await?;
         let new_salt = Uuid::new_v4().to_string();
         let passwd_digest = UserService::get_passwd_digest(new_password, &new_salt);
-        let result = sqlx::query("update users set password=?, salt=? where id=?")
-            .bind(passwd_digest)
-            .bind(new_salt)
-            .bind(&user.id)
-            .execute(&mut *tx)
-            .await?;
+        let result = UserService::run_sql_metered(
+            sqlx::query("update users set password=?, salt=? where id=?")
+                .bind(passwd_digest)
+                .bind(new_salt)
+                .bind(&user.id)
+                .execute(&mut *tx),
+        )
+        .await?;
         if result.rows_affected() == 1 {
             tx.commit().await?;
             Ok(())
@@ -172,14 +183,16 @@ impl UserService {
     }
 
     pub async fn get_user_messages(&self) -> UserResult<Vec<UserMessageView>> {
-        Ok(sqlx::query_as::<Sqlite, UserMessageView>(
-            r#"
+        Ok(UserService::run_sql_metered(
+            sqlx::query_as::<Sqlite, UserMessageView>(
+                r#"
         select u.name as author_name, m.message, m.sent_at_instant
         from user_messages m
                  join main.users u on u.id = m.author_id
         order by m.sent_at_instant desc"#,
+            )
+            .fetch_all(&self.pool),
         )
-        .fetch_all(&self.pool)
         .await?)
     }
 
@@ -197,13 +210,14 @@ impl UserService {
             _ => None,
         };
         if let Some(message) = message_str {
+            UserService::run_sql_metered(
             sqlx::query("insert into user_messages(id, author_id, message, sent_at_instant) values(?,?,?,?)")
                 .bind(&message_id)
                 .bind(&user.id)
                 .bind(message)
                 .bind(timestamp as i64)
                 .execute(&mut *tx)
-                .await?;
+            ).await?;
             tx.commit().await?;
         }
         Ok(())
@@ -240,25 +254,25 @@ impl UserService {
     async fn ensure_schema_exists(&self) -> Result<(), UserError> {
         let mut connection = self.pool.acquire().await?;
         let mut tx = connection.begin().await?;
-        let result = sqlx::query("select name from sqlite_master where type = 'table'")
-            .fetch_all(&mut *tx)
-            .await?
-            .iter()
-            .fold(0, |acc, elem| {
-                let tbl_name = elem.get::<String, usize>(0);
-                match tbl_name.as_str() {
-                    "user_messages" | "users" => acc + 1,
-                    _ => acc,
-                }
-            });
+        let result = UserService::run_sql_metered(
+            sqlx::query("select name from sqlite_master where type = 'table'").fetch_all(&mut *tx),
+        )
+        .await?
+        .iter()
+        .fold(0, |acc, elem| {
+            let tbl_name = elem.get::<String, usize>(0);
+            match tbl_name.as_str() {
+                "user_messages" | "users" => acc + 1,
+                _ => acc,
+            }
+        });
         if result == 2 {
             tx.commit().await?;
             return Ok(());
         }
         info!("Creating a new database as it did not exist before.");
         for sql in INIT_SQL.deref() {
-            let result = sqlx::query(sql)
-                .execute(&mut *tx)
+            let result = UserService::run_sql_metered(sqlx::query(sql).execute(&mut *tx))
                 .await
                 .map(|_| ())
                 .map_err(Sql);
@@ -271,6 +285,23 @@ impl UserService {
         self.update_user(&admin_user.id, true, true).await?;
         info!("Created first admin user: admin/admin don't forget to change the credentials.");
         Ok(())
+    }
+
+    async fn run_sql_metered<F, R>(metered_fut: F) -> Result<R, sqlx::Error>
+    where
+        F: Future<Output = Result<R, sqlx::Error>>,
+    {
+        let start_time = SystemTime::now();
+        let result = metered_fut.await;
+        match SystemTime::now().duration_since(start_time) {
+            Ok(dur) => {
+                Metrics::instance().track_sql(dur);
+            }
+            Err(err) => {
+                warn!("Could not compute elapsed time: {}", err)
+            }
+        }
+        result
     }
 }
 

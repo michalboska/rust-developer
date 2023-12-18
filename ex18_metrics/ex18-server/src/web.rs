@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
+use crate::metrics::Metrics;
 use log::{error, info};
 use rocket::form::Form;
 use rocket::fs::NamedFile;
@@ -36,7 +37,8 @@ pub async fn serve_web(addr: SocketAddr) -> Result<(), rocket::Error> {
                 login_redirect,
                 signup,
                 update_user,
-                assets
+                assets,
+                metrics,
             ],
         )
         .launch()
@@ -121,6 +123,14 @@ async fn assets(asset: PathBuf) -> Option<NamedFile> {
     NamedFile::open(Path::new(ASSETS_DIR).join(asset))
         .await
         .ok()
+}
+
+#[get("/metrics")]
+async fn metrics() -> Result<String, Status> {
+    Metrics::instance().export().map_err(|err| {
+        error!("Error when exporting metrics {}", err);
+        Status::InternalServerError
+    })
 }
 
 #[derive(Debug, Error)]

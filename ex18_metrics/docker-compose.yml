@@ -3,21 +3,34 @@ networks:
   prometheus:
     driver: bridge
 services:
+  chat:
+    build:
+      context: .
+      target: chat
+    networks:
+      - prometheus
+    ports:
+      - 11111:11111
+      - 8080:8080
   prometheus:
     image: prom/prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
       - prometheus
+    links:
+      - chat
     ports:
       - 9090:9090
   grafana:
     depends_on:
       - prometheus
+    links:
+      - prometheus
     image: grafana/grafana-enterprise
     volumes:
       - ./grafana-prometheus.yml:/etc/grafana/provisioning/datasources/grafana-prometheus.yml
     networks:
-      -  prometheus
+      - prometheus
     ports:
       - 3000:3000
