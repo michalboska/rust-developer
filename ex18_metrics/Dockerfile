@@ -11,7 +11,7 @@ COPY Cargo.lock .
 COPY Rocket.toml .
 RUN ["cargo", "build", "--release"]
 
-FROM rust:slim-bullseye AS chat
+FROM debian:bullseye-slim AS chat
 COPY --from=build /opt/cargo/target/release/ex18-bin /opt/cargo/ex18
 COPY ex18-server/public /opt/cargo/ex18-server/public
 COPY ex18-server/templates /opt/cargo/ex18-server/templates
